@@ -4,7 +4,8 @@ import pytesseract
 from document_processing import process_document, parse_tags
 from vector_store import initialize_vectorstore
 from utils import format_tags_html, add_tags_to_document, remove_tag_from_document, debug_document_format, test_retriever_functionality
-from sidebar_components import document_uploader, document_list, ocr_settings, tag_manager
+from sidebar_components import (document_uploader, document_list, ocr_settings, 
+                               tag_manager, storage_settings)
 
 def build_sidebar():
     """Build the sidebar interface with document management and settings"""
@@ -58,12 +59,23 @@ def process_uploaded_document(uploaded_file, doc_type, case_id, doc_title, tags)
                         st.write("### Document Format Debug")
                         debug_document_format(st.session_state.documents)
                     
-                    st.session_state.vectorstore = initialize_vectorstore(st.session_state.documents)
+                    # Get in-memory toggle setting
+                    use_in_memory = st.session_state.get("use_in_memory_storage", True)
+                    
+                    # Initialize vector store with appropriate storage mode
+                    st.session_state.vectorstore = initialize_vectorstore(
+                        st.session_state.documents, 
+                        use_in_memory=use_in_memory
+                    )
                     
                     if st.session_state.vectorstore:
                         st.success("Knowledge base updated!")
                     else:
                         st.error("Failed to create vector store. Check document formats.")
+                        
+                        # If using persistent storage and it failed, suggest trying in-memory
+                        if not use_in_memory:
+                            st.warning("If you're encountering SQLite errors, try enabling 'Use In-Memory Storage' in Settings.")
             except Exception as e:
                 st.error(f"Error updating knowledge base: {str(e)}")
                 st.info("Try reinstalling Chromadb or check the error message for details.")
@@ -83,6 +95,9 @@ def build_settings_panel():
     
     # Model settings
     model_settings()
+    
+    # Vector store storage settings
+    storage_settings()
     
     # OCR settings
     st.markdown("### OCR Settings")
@@ -167,3 +182,17 @@ def build_debug_panel():
         test_query = st.text_input("Test query", value="test query")
         if st.button("Run Test Query"):
             test_retriever_functionality(st.session_state.vectorstore, test_query)
+    
+    # Add information about SQLite version requirements
+    st.markdown("""
+    ### Vector Store Information
+    Chroma vector store has these requirements:
+    - In-memory storage: Works with any SQLite version
+    - Persistent storage: Requires SQLite 3.35.0+
+    
+    You can check your SQLite version by running:
+    ```python
+    import sqlite3
+    print(sqlite3.sqlite_version)
+    ```
+    """)

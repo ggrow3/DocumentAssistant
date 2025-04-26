@@ -42,7 +42,8 @@ def document_uploader():
 def ocr_settings():
     """UI component for OCR settings"""
     with st.expander("OCR Settings"):
-        perform_ocr = st.checkbox("Enable OCR for images", value=True, 
+        # Changed default to False to turn OCR off by default
+        perform_ocr = st.checkbox("Enable OCR for images", value=False, 
                                 help="Extract text from images using Optical Character Recognition")
         
         if perform_ocr:
@@ -59,6 +60,35 @@ def ocr_settings():
             pip install pdf2image poppler-utils
             ```
             """)
+        else:
+            st.info("OCR is disabled. Text will not be extracted from images in PDFs or image files.")
+        
+        # Store OCR setting in session state
+        st.session_state.perform_ocr = perform_ocr
+
+def storage_settings():
+    """UI component for vector store storage settings"""
+    st.markdown("### Storage Settings")
+    
+    # Initialize the setting if it doesn't exist
+    if "use_in_memory_storage" not in st.session_state:
+        st.session_state.use_in_memory_storage = True
+    
+    # Create the toggle
+    use_in_memory = st.toggle(
+        "Use In-Memory Storage",
+        value=st.session_state.use_in_memory_storage,
+        help="Toggle between in-memory storage (faster, not persistent) and file-based storage (persistent, requires SQLite 3.35.0+)"
+    )
+    
+    # Store the setting in session state
+    st.session_state.use_in_memory_storage = use_in_memory
+    
+    # Add help text
+    if use_in_memory:
+        st.info("Using in-memory storage: Vector database will not be saved between sessions, but works with any SQLite version.")
+    else:
+        st.warning("Using persistent storage: Vector database will be saved to disk, but requires SQLite 3.35.0 or newer. If you encounter errors, try switching back to in-memory storage.")
 
 def document_list():
     """UI component for displaying and filtering documents"""
@@ -169,7 +199,8 @@ def document_tag_controls(doc):
                 st.success(f"Added tags to {doc['title']}")
                 # Reinitialize vectorstore
                 with st.spinner("Updating knowledge base..."):
-                    st.session_state.vectorstore = initialize_vectorstore(st.session_state.documents)
+                    use_in_memory = st.session_state.get("use_in_memory_storage", True)
+                    st.session_state.vectorstore = initialize_vectorstore(st.session_state.documents, use_in_memory=use_in_memory)
                 st.rerun()
     
     # Remove tags dropdown
@@ -186,7 +217,8 @@ def document_tag_controls(doc):
                     st.success(f"Removed tag '{tag_to_remove}' from {doc['title']}")
                     # Reinitialize vectorstore
                     with st.spinner("Updating knowledge base..."):
-                        st.session_state.vectorstore = initialize_vectorstore(st.session_state.documents)
+                        use_in_memory = st.session_state.get("use_in_memory_storage", True)
+                        st.session_state.vectorstore = initialize_vectorstore(st.session_state.documents, use_in_memory=use_in_memory)
                     st.rerun()
 
 def remove_document(doc):
@@ -196,7 +228,8 @@ def remove_document(doc):
     
     # Reinitialize vectorstore
     with st.spinner("Updating knowledge base..."):
-        st.session_state.vectorstore = initialize_vectorstore(st.session_state.documents)
+        use_in_memory = st.session_state.get("use_in_memory_storage", True)
+        st.session_state.vectorstore = initialize_vectorstore(st.session_state.documents, use_in_memory=use_in_memory)
         st.success("Knowledge base updated!")
     st.rerun()
 
@@ -225,7 +258,8 @@ def tag_manager():
                 st.success(f"Renamed tag '{tag_to_rename}' to '{new_tag_name}'")
                 # Reinitialize vectorstore
                 with st.spinner("Updating knowledge base..."):
-                    st.session_state.vectorstore = initialize_vectorstore(st.session_state.documents)
+                    use_in_memory = st.session_state.get("use_in_memory_storage", True)
+                    st.session_state.vectorstore = initialize_vectorstore(st.session_state.documents, use_in_memory=use_in_memory)
                 st.rerun()
     else:
         st.info("No tags in the system yet. Add tags to documents to manage them here.")

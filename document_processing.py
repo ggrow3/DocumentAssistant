@@ -33,6 +33,13 @@ def extract_text_from_docx(file):
 
 def extract_text_from_image(file):
     """Extract text from image using OCR"""
+    import streamlit as st
+    
+    # Check if OCR is enabled in session state
+    if not st.session_state.get("perform_ocr", False):
+        st.info("OCR is disabled. No text will be extracted from this image.")
+        return "OCR is disabled. No text was extracted from this image."
+    
     image = Image.open(file)
     
     # Preprocess the image for better OCR results
@@ -57,7 +64,7 @@ def extract_text_from_file(file, file_extension):
     else:
         return None
 
-def process_document(file, doc_type, case_id, doc_title, tags=[]):
+def process_document(uploaded_file, doc_type, case_id, doc_title, tags=[]):
     """Process a document and extract its text and metadata"""
     import streamlit as st
     import gc
@@ -67,15 +74,15 @@ def process_document(file, doc_type, case_id, doc_title, tags=[]):
     
     try:
         # Create a named temporary file without auto-deletion
-        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.name).suffix) as tmp:
-            tmp.write(file.getvalue())
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp:
+            tmp.write(uploaded_file.getvalue())
             tmp_path = tmp.name
             # Make sure file is closed properly before proceeding
             tmp.flush()
             os.fsync(tmp.fileno())
         
         # Extract text based on file type
-        file_extension = Path(file.name).suffix.lower()
+        file_extension = Path(uploaded_file.name).suffix.lower()
         
         # Ensure the file exists before proceeding
         if not os.path.exists(tmp_path):
@@ -86,59 +93,66 @@ def process_document(file, doc_type, case_id, doc_title, tags=[]):
         gc.collect()
         
         if file_extension == ".pdf":
+            # Check if OCR should be used on PDF
+            perform_ocr = st.session_state.get("perform_ocr", False)
+            
             loader = PyPDFLoader(tmp_path)
             pages = loader.load_and_split()
             text = "\n".join([page.page_content for page in pages])
             
-            # For OCR on PDF pages, use a safer approach
-            try:
-                # Try to use PyMuPDF for PDF page rendering and OCR
+            # Only perform OCR on PDF pages if OCR is enabled
+            if perform_ocr:
+                st.info("Processing PDF with OCR enabled.")
                 try:
-                    import fitz  # PyMuPDF
-                    ocr_text = ""
-                    pdf_document = fitz.open(tmp_path)
-                    
-                    for page_num in range(len(pdf_document)):
-                        page = pdf_document[page_num]
-                        # Convert page to image
-                        pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))  # 2x zoom for better OCR
-                        img_bytes = pix.pil_tobytes(format="PNG")
-                        img = Image.open(io.BytesIO(img_bytes))
-                        
-                        # Perform OCR on the page image
-                        page_text = pytesseract.image_to_string(img)
-                        if page_text.strip():
-                            ocr_text += f"\n\n[OCR from page {page_num+1}]:\n{page_text}"
-                    
-                    # Add OCR text to the document text if any was found
-                    if ocr_text.strip():
-                        text += "\n\n[OCR TEXT FROM PDF PAGES]\n" + ocr_text
-                    
-                    # Make sure to close the PDF document
-                    pdf_document.close()
-                        
-                except ImportError:
-                    # If PyMuPDF is not installed, fallback to simpler method
-                    st.info("PyMuPDF (fitz) not installed. Using fallback OCR method for PDFs.")
-                    # Use pdf2image as an alternative if available
+                    # Try to use PyMuPDF for PDF page rendering and OCR
                     try:
-                        from pdf2image import convert_from_path
-                        images = convert_from_path(tmp_path)
+                        import fitz  # PyMuPDF
                         ocr_text = ""
+                        pdf_document = fitz.open(tmp_path)
                         
-                        for i, image in enumerate(images):
-                            page_text = pytesseract.image_to_string(image)
+                        for page_num in range(len(pdf_document)):
+                            page = pdf_document[page_num]
+                            # Convert page to image
+                            pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))  # 2x zoom for better OCR
+                            img_bytes = pix.pil_tobytes(format="PNG")
+                            img = Image.open(io.BytesIO(img_bytes))
+                            
+                            # Perform OCR on the page image
+                            page_text = pytesseract.image_to_string(img)
                             if page_text.strip():
-                                ocr_text += f"\n\n[OCR from page {i+1}]:\n{page_text}"
+                                ocr_text += f"\n\n[OCR from page {page_num+1}]:\n{page_text}"
                         
+                        # Add OCR text to the document text if any was found
                         if ocr_text.strip():
                             text += "\n\n[OCR TEXT FROM PDF PAGES]\n" + ocr_text
+                        
+                        # Make sure to close the PDF document
+                        pdf_document.close()
+                            
                     except ImportError:
-                        st.warning("Neither PyMuPDF nor pdf2image are installed. OCR for PDF pages skipped.")
-                
-            except Exception as e:
-                st.warning(f"Error performing OCR on PDF: {str(e)}")
+                        # If PyMuPDF is not installed, fallback to simpler method
+                        st.info("PyMuPDF (fitz) not installed. Using fallback OCR method for PDFs.")
+                        # Use pdf2image as an alternative if available
+                        try:
+                            from pdf2image import convert_from_path
+                            images = convert_from_path(tmp_path)
+                            ocr_text = ""
+                            
+                            for i, image in enumerate(images):
+                                page_text = pytesseract.image_to_string(image)
+                                if page_text.strip():
+                                    ocr_text += f"\n\n[OCR from page {i+1}]:\n{page_text}"
+                            
+                            if ocr_text.strip():
+                                text += "\n\n[OCR TEXT FROM PDF PAGES]\n" + ocr_text
+                        except ImportError:
+                            st.warning("Neither PyMuPDF nor pdf2image are installed. OCR for PDF pages skipped.")
                     
+                except Exception as e:
+                    st.warning(f"Error performing OCR on PDF: {str(e)}")
+            else:
+                st.info("Processing PDF with OCR disabled. Text will be extracted only from text layers.")
+                
         elif file_extension in [".docx", ".doc"]:
             loader = Docx2txtLoader(tmp_path)
             pages = loader.load_and_split()
@@ -148,10 +162,17 @@ def process_document(file, doc_type, case_id, doc_title, tags=[]):
             pages = loader.load_and_split()
             text = "\n".join([page.page_content for page in pages])
         elif file_extension in [".jpg", ".jpeg", ".png"]:
-            text = extract_text_from_image(tmp_path)
+            # For images, check if OCR is enabled
+            if st.session_state.get("perform_ocr", False):
+                text = extract_text_from_image(tmp_path)
+                st.info(f"OCR extracted {len(text.split())} words from image.")
+            else:
+                text = "OCR is disabled. No text was extracted from this image."
+                st.warning("OCR is disabled. No text was extracted from this image.")
+            
             # Create a proper document object instead of just a string
             from langchain_core.documents import Document
-            pages = [Document(page_content=text, metadata={"source": file.name, "page": 0})]
+            pages = [Document(page_content=text, metadata={"source": uploaded_file.name, "page": 0})]
         else:
             st.error(f"Unsupported file format: {file_extension}")
             safely_delete_temp_file(tmp_path)
@@ -164,11 +185,11 @@ def process_document(file, doc_type, case_id, doc_title, tags=[]):
         doc_id = str(uuid.uuid4())
         document = {
             "id": doc_id,
-            "title": doc_title or file.name,
+            "title": doc_title or uploaded_file.name,
             "type": doc_type,
             "case_id": case_id,
             "text": text,
-            "filename": file.name,
+            "filename": uploaded_file.name,
             "uploaded_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "pages": pages,
             "tags": tags

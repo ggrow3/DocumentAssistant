@@ -5,12 +5,13 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_community.vectorstores.utils import filter_complex_metadata
 
-def initialize_vectorstore(documents):
+def initialize_vectorstore(documents, use_in_memory=True):
     """
     Initialize vector store with documents.
     
     Args:
         documents: List of document objects
+        use_in_memory: Whether to use in-memory storage (True) or persistent storage (False)
     
     Returns:
         Vector store object
@@ -106,11 +107,21 @@ def initialize_vectorstore(documents):
                 st.write(f"  Content: {doc.page_content[:100]}...")
                 st.write(f"  Metadata: {doc.metadata}")
         
-        vectorstore = Chroma.from_documents(
-            documents=langchain_docs,
-            embedding=embeddings,
-            persist_directory="./chroma_db"
-        )
+        # Create vectorstore with or without persistence based on the toggle
+        if use_in_memory:
+            st.info("Using in-memory vector store (data will be lost when the app is restarted)")
+            vectorstore = Chroma.from_documents(
+                documents=langchain_docs,
+                embedding=embeddings
+                # No persist_directory parameter means in-memory storage
+            )
+        else:
+            st.info("Using persistent vector store (data will be saved to disk)")
+            vectorstore = Chroma.from_documents(
+                documents=langchain_docs,
+                embedding=embeddings,
+                persist_directory="./chroma_db"
+            )
         
         # Configure retriever
         retriever = vectorstore.as_retriever(
@@ -124,7 +135,7 @@ def initialize_vectorstore(documents):
             test_query = "sample test query"
             st.write(f"Test Query: {test_query}")
             try:
-                test_docs = retriever.get_relevant_documents(test_query)
+                test_docs = retriever.invoke(test_query)
                 st.write(f"Retrieved {len(test_docs)} documents")
                 for i, doc in enumerate(test_docs[:2]):  # Show first 2
                     st.write(f"Retrieved Doc {i}:")
@@ -137,7 +148,7 @@ def initialize_vectorstore(documents):
         
     except Exception as e:
         st.error(f"Error creating vector store: {str(e)}")
-        st.info("If you're seeing metadata errors, there might be complex data types in your document metadata.")
+        st.info("If you're seeing SQLite errors, try enabling the 'Use In-Memory Storage' option in Settings.")
         
         if st.session_state.get("debug_mode", False):
             # More detailed error info in debug mode
