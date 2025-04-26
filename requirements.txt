@@ -12,6 +12,7 @@ langchain-core>=0.1.10
 chromadb>=0.4.18
 openai>=1.1.1
 regex>=2023.6.3
+pysqlite3-binary
 
 # Optional dependencies for better PDF OCR
 PyMuPDF>=1.22.5
