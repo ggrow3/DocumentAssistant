@@ -59,26 +59,25 @@ def process_uploaded_document(uploaded_file, doc_type, case_id, doc_title, tags)
                         st.write("### Document Format Debug")
                         debug_document_format(st.session_state.documents)
                     
-                    # Get in-memory toggle setting
-                    use_in_memory = st.session_state.get("use_in_memory_storage", True)
+                    # Get vectorstore settings
+                    vectorstore_type = st.session_state.get("vectorstore_type", "chroma")
+                    use_in_memory = True  # Always use in-memory for Chroma
+                    pinecone_index = st.session_state.get("pinecone_index", None)
                     
-                    # Initialize vector store with appropriate storage mode
+                    # Initialize vector store with appropriate settings
                     st.session_state.vectorstore = initialize_vectorstore(
                         st.session_state.documents, 
-                        use_in_memory=use_in_memory
+                        use_in_memory=use_in_memory,
+                        vectorstore_type=vectorstore_type,
+                        pinecone_index=pinecone_index
                     )
                     
                     if st.session_state.vectorstore:
                         st.success("Knowledge base updated!")
                     else:
-                        st.error("Failed to create vector store. Check document formats.")
-                        
-                        # If using persistent storage and it failed, suggest trying in-memory
-                        if not use_in_memory:
-                            st.warning("If you're encountering SQLite errors, try enabling 'Use In-Memory Storage' in Settings.")
+                        st.error("Failed to create vector store. Check settings and try again.")
             except Exception as e:
                 st.error(f"Error updating knowledge base: {str(e)}")
-                st.info("Try reinstalling Chromadb or check the error message for details.")
                 
                 # Enable debug mode automatically when there's an error
                 st.session_state.debug_mode = True
@@ -96,8 +95,8 @@ def build_settings_panel():
     # Model settings
     model_settings()
     
-    # Vector store storage settings
-    storage_settings()
+    # Vector store settings
+    vectorstore_settings()
     
     # OCR settings
     st.markdown("### OCR Settings")
@@ -125,11 +124,23 @@ def api_settings():
     openai_api_key = st.text_input(
         "OpenAI API Key",
         type="password",
+        value=os.environ.get("OPENAI_API_KEY", ""),
         help="Enter your OpenAI API key here. It's required for embeddings and the chat model."
     )
     
     if openai_api_key:
         os.environ["OPENAI_API_KEY"] = openai_api_key
+        
+    # Pinecone API Key input
+    pinecone_api_key = st.text_input(
+        "Pinecone API Key",
+        type="password",
+        value=os.environ.get("PINECONE_API_KEY", ""),
+        help="Enter your Pinecone API key here if you want to use Pinecone as your vector store."
+    )
+    
+    if pinecone_api_key:
+        os.environ["PINECONE_API_KEY"] = pinecone_api_key
 
 def model_settings():
     """LLM model settings"""
@@ -155,6 +166,123 @@ def model_settings():
     
     st.session_state.settings["model_name"] = model_name
     st.session_state.settings["temperature"] = temperature
+
+def vectorstore_settings():
+    """Vector store settings"""
+    st.markdown("### Vector Store Settings")
+    
+    # Vector store type selection
+    vectorstore_type = st.radio(
+        "Vector Store Type",
+        ["Chroma", "Pinecone"],
+        index=0 if st.session_state.get("vectorstore_type", "chroma") == "chroma" else 1,
+        help="Select which vector database to use"
+    )
+    
+    # Convert selection to lowercase for internal use
+    st.session_state.vectorstore_type = vectorstore_type.lower()
+    
+    # Show appropriate settings based on vector store type
+    if vectorstore_type == "Chroma":
+        # For Chroma, always use in-memory storage
+        st.info("Using Chroma with in-memory storage. Vector database will not be saved between sessions.")
+    
+    elif vectorstore_type == "Pinecone":
+        # Pinecone settings
+        st.markdown("#### Pinecone Settings")
+        
+        # Environment selection
+        pinecone_environment = st.selectbox(
+            "Pinecone Environment",
+            ["us-west1-gcp", "us-east1-gcp", "us-east4-gcp", "us-central1-gcp", 
+             "eu-west1-gcp", "asia-northeast1-gcp", "asia-southeast1-gcp"],
+            index=0,
+            help="Select your Pinecone environment"
+        )
+        st.session_state.pinecone_environment = pinecone_environment
+        
+        # Index name
+        pinecone_index = st.text_input(
+            "Pinecone Index Name",
+            value=st.session_state.get("pinecone_index", ""),
+            help="Enter the name of your Pinecone index"
+        )
+        st.session_state.pinecone_index = pinecone_index
+        
+        # Dimension info
+        st.info("For OpenAI embeddings, use a Pinecone index with dimension=1536")
+        
+        # Check if Pinecone API key is set
+        if not os.environ.get("PINECONE_API_KEY"):
+            st.warning("Pinecone API key not set. Please enter it in the API Settings section above.")
+            
+        # Check if Pinecone index is set    
+        if not pinecone_index:
+            st.warning("Pinecone index name not set. Please enter a valid index name.")
+            
+        # Provide button to test Pinecone connection
+        if st.button("Test Pinecone Connection"):
+            with st.spinner("Testing Pinecone connection..."):
+                try:
+                    import pinecone
+                    
+                    # Initialize Pinecone
+                    pinecone.init(
+                        api_key=os.environ.get("PINECONE_API_KEY", ""),
+                        environment=pinecone_environment
+                    )
+                    
+                    # List indexes to test connection
+                    indexes = pinecone.list_indexes()
+                    
+                    # Check if specified index exists
+                    if pinecone_index in indexes:
+                        st.success(f"Successfully connected to Pinecone. Index '{pinecone_index}' exists.")
+                    else:
+                        st.warning(f"Connected to Pinecone, but index '{pinecone_index}' does not exist. Available indexes: {', '.join(indexes)}")
+                        
+                        # Offer to create the index
+                        if st.button("Create Index"):
+                            try:
+                                # Create the index with dimension 1536 for OpenAI embeddings
+                                pinecone.create_index(
+                                    name=pinecone_index,
+                                    dimension=1536,
+                                    metric="cosine"
+                                )
+                                st.success(f"Index '{pinecone_index}' created successfully!")
+                            except Exception as e:
+                                st.error(f"Error creating index: {str(e)}")
+                                
+                except ImportError:
+                    st.error("Pinecone Python client not installed. Please install with: pip install pinecone-client")
+                except Exception as e:
+                    st.error(f"Error connecting to Pinecone: {str(e)}")
+                    
+    # Add button to rebuild vector store
+    if st.session_state.documents:
+        if st.button("Rebuild Vector Store"):
+            with st.spinner("Rebuilding vector store..."):
+                try:
+                    # Get vectorstore settings
+                    use_in_memory = True  # Always use in-memory for Chroma
+                    vectorstore_type = st.session_state.get("vectorstore_type", "chroma")
+                    pinecone_index = st.session_state.get("pinecone_index", None)
+                    
+                    # Initialize vector store with appropriate settings
+                    st.session_state.vectorstore = initialize_vectorstore(
+                        st.session_state.documents, 
+                        use_in_memory=use_in_memory,
+                        vectorstore_type=vectorstore_type,
+                        pinecone_index=pinecone_index
+                    )
+                    
+                    if st.session_state.vectorstore:
+                        st.success("Vector store rebuilt successfully!")
+                    else:
+                        st.error("Failed to rebuild vector store. Check settings and try again.")
+                except Exception as e:
+                    st.error(f"Error rebuilding vector store: {str(e)}")
 
 def debug_settings():
     """Debug mode settings"""
@@ -183,16 +311,39 @@ def build_debug_panel():
         if st.button("Run Test Query"):
             test_retriever_functionality(st.session_state.vectorstore, test_query)
     
-    # Add information about SQLite version requirements
-    st.markdown("""
-    ### Vector Store Information
-    Chroma vector store has these requirements:
-    - In-memory storage: Works with any SQLite version
-    - Persistent storage: Requires SQLite 3.35.0+
+    # Add debug info based on vector store type
+    vectorstore_type = st.session_state.get("vectorstore_type", "chroma")
     
-    You can check your SQLite version by running:
-    ```python
-    import sqlite3
-    print(sqlite3.sqlite_version)
-    ```
-    """)
+    if vectorstore_type == "chroma":
+        # Add information about SQLite version requirements
+        st.markdown("""
+        ### Chroma Information
+        Chroma vector store has these requirements:
+        - In-memory storage: Works with any SQLite version
+        - Persistent storage: Requires SQLite 3.35.0+
+        
+        You can check your SQLite version by running:
+        ```python
+        import sqlite3
+        print(sqlite3.sqlite_version)
+        ```
+        """)
+    
+    elif vectorstore_type == "pinecone":
+        # Add Pinecone debug info
+        st.markdown("""
+        ### Pinecone Information
+        Debug information for Pinecone:
+        
+        - Check Pinecone API key is set correctly
+        - Verify Pinecone environment is correct
+        - Make sure the index exists in your Pinecone account
+        - Ensure the index dimension is 1536 for OpenAI embeddings
+        
+        You can check your Pinecone indexes with:
+        ```python
+        import pinecone
+        pinecone.init(api_key="your-key", environment="your-env")
+        print(pinecone.list_indexes())
+        ```
+        """)

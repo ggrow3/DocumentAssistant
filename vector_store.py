@@ -1,24 +1,24 @@
 import streamlit as st
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma, Pinecone
 from langchain_core.documents import Document
 from langchain_community.vectorstores.utils import filter_complex_metadata
+import os
 
-def initialize_vectorstore(documents, use_in_memory=True):
+def initialize_vectorstore(documents, use_in_memory=True, vectorstore_type="chroma", pinecone_index=None):
     """
     Initialize vector store with documents.
     
     Args:
         documents: List of document objects
-        use_in_memory: Whether to use in-memory storage (True) or persistent storage (False)
+        use_in_memory: Whether to use in-memory storage (True) or persistent storage (False) for Chroma
+        vectorstore_type: Type of vectorstore to use ("chroma" or "pinecone")
+        pinecone_index: Name of Pinecone index to use (if vectorstore_type is "pinecone")
     
     Returns:
         Vector store object
     """
-    # FORCING IN-MEMORY STORAGE: Always use in-memory storage to avoid SQLite issues
-    use_in_memory = True
-    
     # Handle empty documents case
     if not documents:
         st.warning("No documents provided for vectorstore initialization.")
@@ -95,8 +95,7 @@ def initialize_vectorstore(documents, use_in_memory=True):
         return None
     
     try:
-        # Create vectorstore
-        st.info(f"Creating vector store with {len(langchain_docs)} document chunks (using in-memory storage)...")
+        # Create embeddings
         embeddings = OpenAIEmbeddings()
         
         # Log the first few documents for debugging
@@ -107,22 +106,66 @@ def initialize_vectorstore(documents, use_in_memory=True):
                 st.write(f"  Content: {doc.page_content[:100]}...")
                 st.write(f"  Metadata: {doc.metadata}")
         
-        # ALWAYS create vectorstore with in-memory storage
-        # DO NOT use persist_directory parameter
-        vectorstore = Chroma.from_documents(
-            documents=langchain_docs,
-            embedding=embeddings
-            # No persist_directory parameter means in-memory storage
-        )
-        
-        # Configure retriever
-        retriever = vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": 5}  # Return top 5 most relevant chunks
-        )
+        # Create vectorstore based on selected type
+        if vectorstore_type == "pinecone":
+            # Check if Pinecone API key is available
+            pinecone_api_key = os.environ.get("PINECONE_API_KEY")
+            if not pinecone_api_key:
+                st.error("Pinecone API key not found. Please enter it in settings.")
+                return None
+                
+            # Check if Pinecone index name is provided
+            if not pinecone_index:
+                st.error("Pinecone index name not provided. Please enter it in settings.")
+                return None
+                
+            st.info(f"Creating Pinecone vector store with {len(langchain_docs)} document chunks...")
+            
+            # Import and initialize Pinecone
+            try:
+                import pinecone
+                # Get environment from session state or use default
+                pinecone_environment = st.session_state.get("pinecone_environment", "us-west1-gcp")
+                
+                # Initialize Pinecone
+                pinecone.init(
+                    api_key=pinecone_api_key,
+                    environment=pinecone_environment
+                )
+                
+                # Create vectorstore
+                vectorstore = Pinecone.from_documents(
+                    documents=langchain_docs,
+                    embedding=embeddings,
+                    index_name=pinecone_index
+                )
+                
+                st.success(f"Successfully created Pinecone vector store using index '{pinecone_index}'")
+                
+            except ImportError:
+                st.error("Pinecone Python client not installed. Please install with: pip install pinecone-client")
+                return None
+            except Exception as e:
+                st.error(f"Error creating Pinecone vector store: {str(e)}")
+                return None
+        else:
+            # Default to Chroma
+            st.info(f"Creating Chroma vector store with {len(langchain_docs)} document chunks (using in-memory storage)...")
+            
+            # Always create vectorstore with in-memory storage for now
+            vectorstore = Chroma.from_documents(
+                documents=langchain_docs,
+                embedding=embeddings
+                # No persist_directory parameter means in-memory storage
+            )
         
         # Test the retriever to make sure it's working
         if st.session_state.get("debug_mode", False) and langchain_docs:
+            retriever = vectorstore.as_retriever(
+                search_type="similarity",
+                search_kwargs={"k": 5}
+            )
+            
             st.write("### Testing Retriever:")
             test_query = "sample test query"
             st.write(f"Test Query: {test_query}")
@@ -140,7 +183,6 @@ def initialize_vectorstore(documents, use_in_memory=True):
         
     except Exception as e:
         st.error(f"Error creating vector store: {str(e)}")
-        st.info("If you're seeing SQLite errors with in-memory storage, there might be an issue with Chroma installation.")
         
         if st.session_state.get("debug_mode", False):
             # More detailed error info in debug mode
@@ -153,10 +195,11 @@ def initialize_vectorstore(documents, use_in_memory=True):
                 st.write(langchain_docs[0].metadata)
                 
             # Try to import and check sqlite3 version directly
-            try:
-                import sqlite3
-                st.write(f"SQLite version: {sqlite3.sqlite_version}")
-            except:
-                st.write("Could not determine SQLite version")
+            if vectorstore_type == "chroma":
+                try:
+                    import sqlite3
+                    st.write(f"SQLite version: {sqlite3.sqlite_version}")
+                except:
+                    st.write("Could not determine SQLite version")
             
         return None

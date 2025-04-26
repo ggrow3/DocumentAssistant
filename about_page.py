@@ -15,6 +15,7 @@ def about_page():
     - **Document Context**: View the full context of referenced documents
     - **OCR Processing**: Extract text from images and PDFs with embedded images
     - **Document Tagging**: Add tags to documents for better organization and search
+    - **Vector Database Options**: Choose between Chroma (in-memory) and Pinecone (cloud-based) for document storage
     
     ## How to Use
     
@@ -31,7 +32,14 @@ def about_page():
     - Text files (.txt)
     - Images with text (.jpg, .jpeg, .png) using OCR
     
+    ## Vector Database Options
+    
+    - **Chroma (Default)**: Fast, in-memory vector database that works well for local usage
+    - **Pinecone**: Cloud-based vector database for persistent storage and larger document collections
+    
     ## Privacy & Security
     
-    All documents are processed locally and are not sent to external servers beyond what's needed for AI processing. Your OpenAI API key is stored only in your current session.
+    All documents are processed locally and are not sent to external servers beyond what's needed for AI processing. Your OpenAI API key and Pinecone API key are stored only in your current session.
+    
+    When using Pinecone, document embeddings are stored in your Pinecone account, which provides additional persistence between sessions.
     """)
