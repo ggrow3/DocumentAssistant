@@ -3,9 +3,9 @@ import streamlit as st
 def about_page():
     """Display the about page with information about the application"""
     st.markdown("""
-    # About Personal Injury Law Firm AI Assistant
+    # About Legal Document AI Assistant
     
-    This AI assistant is designed specifically for personal injury law firms to help manage and search through case documents.
+    This AI assistant is designed specifically for legal documents to help manage and search through case documents.
     
     ## Features
     
