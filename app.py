@@ -24,10 +24,6 @@ def cleanup_temp_files():
 
 atexit.register(cleanup_temp_files)
 
-# When the application needs to reload after a state change,
-# use st.rerun() instead of st.experimental_rerun()
-# The experimental_rerun method will be removed after April 2024.
-
 # Configure page
 st.set_page_config(
     page_title="Personal Injury Law Firm AI Assistant",
