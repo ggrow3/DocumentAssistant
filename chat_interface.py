@@ -21,7 +21,7 @@ def build_chat_interface():
 
 def build_chat_messages_panel():
     """Build the chat messages panel"""
-    st.markdown("### Law Firm Assistant Chat")
+    st.markdown("### Document Assistant Chat")
     
     # Add a toggle for showing/hiding citations in chat
     if 'show_citations' not in st.session_state:
@@ -118,8 +118,8 @@ def process_chat_input(user_input):
     # Show spinner while processing
     with st.spinner("Thinking..."):
         try:
-            # First retrieve relevant documents
-            retrieved_docs = retriever.get_relevant_documents(user_input)
+            # First retrieve relevant documents using invoke() method
+            retrieved_docs = retriever.invoke(user_input)
             
             # Debug information
             if st.session_state.get("debug_mode", False):
