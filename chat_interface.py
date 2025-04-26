@@ -21,7 +21,7 @@ def build_chat_interface():
 
 def build_chat_messages_panel():
     """Build the chat messages panel"""
-    st.markdown("### Document Assistant Chat")
+    st.markdown("### Legal Document Assistant Chat")
     
     # Add a toggle for showing/hiding citations in chat
     if 'show_citations' not in st.session_state:

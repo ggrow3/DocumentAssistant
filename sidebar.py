@@ -191,16 +191,6 @@ def vectorstore_settings():
         # Pinecone settings
         st.markdown("#### Pinecone Settings")
         
-        # Environment selection
-        pinecone_environment = st.selectbox(
-            "Pinecone Environment",
-            ["us-west1-gcp", "us-east1-gcp", "us-east4-gcp", "us-central1-gcp", 
-             "eu-west1-gcp", "asia-northeast1-gcp", "asia-southeast1-gcp"],
-            index=0,
-            help="Select your Pinecone environment"
-        )
-        st.session_state.pinecone_environment = pinecone_environment
-        
         # Index name
         pinecone_index = st.text_input(
             "Pinecone Index Name",
@@ -224,40 +214,65 @@ def vectorstore_settings():
         if st.button("Test Pinecone Connection"):
             with st.spinner("Testing Pinecone connection..."):
                 try:
-                    import pinecone
+                    from pinecone import Pinecone
                     
-                    # Initialize Pinecone
-                    pinecone.init(
-                        api_key=os.environ.get("PINECONE_API_KEY", ""),
-                        environment=pinecone_environment
-                    )
+                    # Initialize Pinecone client
+                    pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY", ""))
                     
                     # List indexes to test connection
-                    indexes = pinecone.list_indexes()
+                    indexes = pc.list_indexes().names()
                     
                     # Check if specified index exists
                     if pinecone_index in indexes:
                         st.success(f"Successfully connected to Pinecone. Index '{pinecone_index}' exists.")
+                        
+                        # Get index stats if available
+                        try:
+                            index = pc.Index(pinecone_index)
+                            stats = index.describe_index_stats()
+                            st.write(f"Index contains {stats.namespaces.get('', {}).get('vector_count', 0)} vectors")
+                        except:
+                            pass
                     else:
-                        st.warning(f"Connected to Pinecone, but index '{pinecone_index}' does not exist. Available indexes: {', '.join(indexes)}")
+                        available_indexes = ", ".join(indexes) if indexes else "none"
+                        st.warning(f"Connected to Pinecone, but index '{pinecone_index}' does not exist. Available indexes: {available_indexes}")
                         
                         # Offer to create the index
-                        if st.button("Create Index"):
+                        create_index = st.button("Create Index")
+                        if create_index:
                             try:
-                                # Create the index with dimension 1536 for OpenAI embeddings
-                                pinecone.create_index(
-                                    name=pinecone_index,
-                                    dimension=1536,
-                                    metric="cosine"
-                                )
+                                # Try with ServerlessSpec
+                                try:
+                                    from pinecone import ServerlessSpec
+                                    
+                                    # Use ServerlessSpec for index creation
+                                    pc.create_index(
+                                        name=pinecone_index,
+                                        dimension=1536,
+                                        metric="cosine",
+                                        spec=ServerlessSpec(
+                                            cloud="aws",
+                                            region="us-west-2"
+                                        )
+                                    )
+                                except ImportError:
+                                    # Fallback to basic index creation
+                                    pc.create_index(
+                                        name=pinecone_index,
+                                        dimension=1536,
+                                        metric="cosine"
+                                    )
+                                
                                 st.success(f"Index '{pinecone_index}' created successfully!")
                             except Exception as e:
                                 st.error(f"Error creating index: {str(e)}")
-                                
+                
                 except ImportError:
-                    st.error("Pinecone Python client not installed. Please install with: pip install pinecone-client")
+                    st.error("Pinecone Python client not installed. Please install with: pip install pinecone-client>=3.0.0")
                 except Exception as e:
                     st.error(f"Error connecting to Pinecone: {str(e)}")
+                    import traceback
+                    st.error(f"Traceback: {traceback.format_exc()}")
                     
     # Add button to rebuild vector store
     if st.session_state.documents:
@@ -336,14 +351,15 @@ def build_debug_panel():
         Debug information for Pinecone:
         
         - Check Pinecone API key is set correctly
-        - Verify Pinecone environment is correct
-        - Make sure the index exists in your Pinecone account
+        - Verify index exists in your Pinecone account
         - Ensure the index dimension is 1536 for OpenAI embeddings
         
-        You can check your Pinecone indexes with:
+        You can check your Pinecone installation with:
         ```python
         import pinecone
-        pinecone.init(api_key="your-key", environment="your-env")
-        print(pinecone.list_indexes())
+        print(f"Pinecone client version: {pinecone.__version__}")
         ```
+        
+        This application uses a custom Pinecone implementation that doesn't rely on
+        LangChain's Pinecone integration, which eliminates compatibility issues.
         """)

@@ -26,7 +26,7 @@ atexit.register(cleanup_temp_files)
 
 # Configure page
 st.set_page_config(
-    page_title="Personal Injury Law Firm AI Assistant",
+    page_title="Legal Document AI Assistant",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
