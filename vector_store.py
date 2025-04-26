@@ -16,6 +16,9 @@ def initialize_vectorstore(documents, use_in_memory=True):
     Returns:
         Vector store object
     """
+    # FORCING IN-MEMORY STORAGE: Always use in-memory storage to avoid SQLite issues
+    use_in_memory = True
+    
     # Handle empty documents case
     if not documents:
         st.warning("No documents provided for vectorstore initialization.")
@@ -92,11 +95,8 @@ def initialize_vectorstore(documents, use_in_memory=True):
         return None
     
     try:
-        # Skip the complex metadata filtering which is causing errors
-        # Just use the already cleaned metadata
-        
         # Create vectorstore
-        st.info(f"Creating vector store with {len(langchain_docs)} document chunks...")
+        st.info(f"Creating vector store with {len(langchain_docs)} document chunks (using in-memory storage)...")
         embeddings = OpenAIEmbeddings()
         
         # Log the first few documents for debugging
@@ -107,21 +107,13 @@ def initialize_vectorstore(documents, use_in_memory=True):
                 st.write(f"  Content: {doc.page_content[:100]}...")
                 st.write(f"  Metadata: {doc.metadata}")
         
-        # Create vectorstore with or without persistence based on the toggle
-        if use_in_memory:
-            st.info("Using in-memory vector store (data will be lost when the app is restarted)")
-            vectorstore = Chroma.from_documents(
-                documents=langchain_docs,
-                embedding=embeddings
-                # No persist_directory parameter means in-memory storage
-            )
-        else:
-            st.info("Using persistent vector store (data will be saved to disk)")
-            vectorstore = Chroma.from_documents(
-                documents=langchain_docs,
-                embedding=embeddings,
-                persist_directory="./chroma_db"
-            )
+        # ALWAYS create vectorstore with in-memory storage
+        # DO NOT use persist_directory parameter
+        vectorstore = Chroma.from_documents(
+            documents=langchain_docs,
+            embedding=embeddings
+            # No persist_directory parameter means in-memory storage
+        )
         
         # Configure retriever
         retriever = vectorstore.as_retriever(
@@ -148,7 +140,7 @@ def initialize_vectorstore(documents, use_in_memory=True):
         
     except Exception as e:
         st.error(f"Error creating vector store: {str(e)}")
-        st.info("If you're seeing SQLite errors, try enabling the 'Use In-Memory Storage' option in Settings.")
+        st.info("If you're seeing SQLite errors with in-memory storage, there might be an issue with Chroma installation.")
         
         if st.session_state.get("debug_mode", False):
             # More detailed error info in debug mode
@@ -159,5 +151,12 @@ def initialize_vectorstore(documents, use_in_memory=True):
             st.write("First document metadata sample:")
             if langchain_docs:
                 st.write(langchain_docs[0].metadata)
+                
+            # Try to import and check sqlite3 version directly
+            try:
+                import sqlite3
+                st.write(f"SQLite version: {sqlite3.sqlite_version}")
+            except:
+                st.write("Could not determine SQLite version")
             
         return None
