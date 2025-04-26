@@ -1,6 +1,6 @@
-# Personal Injury Law Firm AI Assistant
+# Legal Document AI Assistant
 
-A Streamlit application that helps personal injury law firms manage, process, and query their case documents using AI.
+A Streamlit application that helps law firms manage, process, and query their case documents using AI.
 
 ## Features
 
