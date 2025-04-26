@@ -10,7 +10,11 @@ from sidebar_components import (document_uploader, document_list, ocr_settings,
 def build_sidebar():
     """Build the sidebar interface with document management and settings"""
     with st.sidebar:
-        st.header("Personal Injury Law Assistant")
+        # For authenticated users, show firm name if available
+        if st.session_state.get('current_user') and st.session_state.current_user.get('firm_name'):
+            st.header(f"{st.session_state.current_user['firm_name']} Legal Assistant")
+        else:
+            st.header("Legal Document AI Assistant")
         
         # Tabs for sidebar content
         sidebar_tabs = ["Document Management", "Settings"]
@@ -47,6 +51,11 @@ def process_uploaded_document(uploaded_file, doc_type, case_id, doc_title, tags)
         document = process_document(uploaded_file, doc_type, case_id, doc_title, tags)
         
         if document:
+            # Add user information to document metadata
+            if st.session_state.get('current_user'):
+                document['uploaded_by'] = st.session_state.current_user['username']
+                document['uploaded_by_name'] = st.session_state.current_user['full_name']
+            
             st.session_state.documents.append(document)
             st.success(f"Successfully processed {document['title']}")
             
@@ -115,8 +124,39 @@ def build_settings_panel():
     st.markdown("### Tag Management")
     tag_manager()
     
+    # User settings section for admin users
+    if st.session_state.get('current_user') and st.session_state.current_user.get('role') == 'admin':
+        user_admin_settings()
+    
     # Debug mode toggle
     debug_settings()
+
+def user_admin_settings():
+    """Admin settings for user management"""
+    st.markdown("### User Management (Admin)")
+    
+    with st.expander("User Administration"):
+        st.info("This section is only visible to administrators.")
+        
+        from auth import load_users
+        
+        # Load users
+        user_data = load_users()
+        users = user_data.get('users', [])
+        
+        # Display user list
+        if users:
+            st.markdown("#### Registered Users")
+            for user in users:
+                st.markdown(f"""
+                **{user['full_name']}** ({user['username']})  
+                Email: {user['email']}  
+                Role: {user.get('role', 'user')}  
+                Created: {user.get('created_at', 'Unknown')}
+                """)
+                st.markdown("---")
+        else:
+            st.warning("No users found in the system.")
 
 def api_settings():
     """API key settings"""
@@ -314,6 +354,13 @@ def build_debug_panel():
     """Build the debug panel in the settings sidebar"""
     st.info("Debug mode is enabled. Document format information will be displayed when processing documents.")
     
+    # Add authentication debug information
+    st.write("### Authentication Debug")
+    if st.session_state.get('current_user'):
+        st.json(st.session_state.current_user)
+    else:
+        st.warning("No user is currently authenticated")
+    
     # Add a button to test document formats
     if st.button("Debug Document Formats") and st.session_state.documents:
         st.write("### Document Format Debug")
@@ -363,3 +410,5 @@ def build_debug_panel():
         This application uses a custom Pinecone implementation that doesn't rely on
         LangChain's Pinecone integration, which eliminates compatibility issues.
         """)
+
+    

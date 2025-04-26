@@ -8,6 +8,7 @@ from sidebar import build_sidebar
 from chat_interface import build_chat_interface
 from about_page import about_page
 from system_check import check_dependencies
+from auth import display_auth_interface, create_default_admin
 
 # Configure tempfile to not delete files immediately
 # This allows us to handle file closing more carefully
@@ -74,15 +75,42 @@ def handle_custom_events():
             st.session_state.tag_event = None
             st.rerun()
 
+# Display a welcome message after login
+def display_welcome_message():
+    if st.session_state.current_user:
+        current_time = st.session_state.get('last_activity').strftime('%H:%M')
+        st.write(f"### Welcome to Legal Document AI Assistant, {st.session_state.current_user['full_name']}!")
+        st.write(f"You logged in at {current_time}. Start by uploading documents in the sidebar.")
+        
+        # Show a tip for first-time users
+        with st.expander("New to Legal Document AI Assistant?"):
+            st.markdown("""
+            **Getting Started Guide:**
+            
+            1. Upload your legal documents using the Document Management tab in the sidebar
+            2. Add tags to organize and categorize your documents
+            3. Ask questions about your documents using the chat interface
+            4. View source documents and their context in the Document Context panel
+            
+            Need more help? Check out the About tab for detailed information on features and usage.
+            """)
+
 # Main app layout
 def main():
     # Initialize session state
     initialize_session_state()
     
+    # Create default admin user if no users exist
+    create_default_admin()
+    
+    # Display authentication interface
+    # This will stop execution if user is not authenticated
+    display_auth_interface()
+    
     # Handle any custom events
     handle_custom_events()
     
-    # Create sidebar
+    # Create sidebar (for authenticated users)
     build_sidebar()
     
     # Create main interface
@@ -90,6 +118,12 @@ def main():
     selected_tab = st.radio("Main interface sections", tabs, horizontal=True, label_visibility="collapsed")
     
     if selected_tab == "Chat":
+        # Display welcome message if this is the first view after login
+        if st.session_state.get('show_welcome', True):
+            display_welcome_message()
+            st.session_state.show_welcome = False
+        
+        # Build chat interface
         build_chat_interface()
     
     elif selected_tab == "About":
