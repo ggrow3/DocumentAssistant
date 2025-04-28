@@ -6,7 +6,10 @@ from vector_store import initialize_vectorstore
 from utils import format_tags_html, add_tags_to_document, remove_tag_from_document, debug_document_format, test_retriever_functionality
 from sidebar_components import (document_uploader, document_list, ocr_settings, 
                                tag_manager, storage_settings)
+from document_manager import build_document_manager
 
+# Update the build_sidebar function to include the new document manager
+# Update the build_sidebar function to remove Vector DB Management
 def build_sidebar():
     """Build the sidebar interface with document management and settings"""
     with st.sidebar:
@@ -16,12 +19,21 @@ def build_sidebar():
         else:
             st.header("Legal Document AI Assistant")
         
-        # Tabs for sidebar content
-        sidebar_tabs = ["Document Management", "Settings"]
+        # Tabs for sidebar content - removed Vector DB Management
+        sidebar_tabs = ["Document Management", "Document Explorer", "Settings"]
         selected_tab = st.radio("Select tab", sidebar_tabs)
         
         if selected_tab == "Document Management":
             build_document_management()
+        
+        elif selected_tab == "Document Explorer":
+            # This is the new tab that will use our document manager
+            st.markdown("### Document Explorer")
+            st.info("Click below to open the document explorer in the main panel")
+            
+            if st.button("Open Document Explorer"):
+                st.session_state['current_tab'] = "Document Explorer"
+                st.rerun()
         
         elif selected_tab == "Settings":
             build_settings_panel()
@@ -188,16 +200,25 @@ def model_settings():
     
     model_name = st.selectbox(
         "Chat Model",
-        ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo", "gpt-4o"]
+        ["gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-3.5-turbo"],
+        index=0,  # Set GPT-4 as default (first in list)
+        help="Select which model to use for chat responses"
     )
     
     temperature = st.slider(
         "Temperature",
         min_value=0.0,
         max_value=1.0,
-        value=0.7,
+        value=0.0,  # Changed from 0.7 to 0.0
         step=0.1,
-        help="Higher values make the model more creative but less predictable"
+        help="0 = more factual and deterministic, 1 = more creative"
+    )
+    
+    # Legal expert mode toggle
+    legal_expert_mode = st.checkbox(
+        "Legal Expert Mode", 
+        value=st.session_state.settings.get("legal_expert_mode", True),
+        help="When enabled, the AI will respond using legal terminology and factual information"
     )
     
     # Save settings in session state
@@ -206,6 +227,22 @@ def model_settings():
     
     st.session_state.settings["model_name"] = model_name
     st.session_state.settings["temperature"] = temperature
+    st.session_state.settings["legal_expert_mode"] = legal_expert_mode
+    
+    # Display legal expert mode information
+    if legal_expert_mode:
+        st.info("""
+        **Legal Expert Mode is enabled.**
+        
+        In this mode, the AI will:
+        - Use formal legal terminology and language
+        - Maintain factual accuracy
+        - Avoid making unsupported claims
+        - Reference legal sources when available
+        - Present information in a structured, professional manner
+        """)
+    else:
+        st.info("Legal Expert Mode is disabled. The AI will use more conversational language.")
 
 def vectorstore_settings():
     """Vector store settings"""

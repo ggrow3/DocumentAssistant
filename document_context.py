@@ -43,26 +43,45 @@ def build_document_context_panel():
         st.rerun()
 
 def get_unique_sources_from_citations(citations):
-    """Extract unique document sources from citations"""
+    """
+    Extract unique document sources from citations, preventing duplicates
+    
+    Args:
+        citations: List of citation objects
+        
+    Returns:
+        Dictionary of unique document sources
+    """
     unique_sources = {}
     
     for citation in citations:
         source = citation["source"]
-        if source != "Unknown" and source != "Error":
-            if source not in unique_sources:
-                unique_sources[source] = {
-                    "doc_id": citation["doc_id"],
-                    "doc_type": citation["doc_type"],
-                    "case_id": citation["case_id"],
-                    "tags": citation.get("tags", []),
-                    "text": citation.get("text", "")
-                }
+        doc_id = citation["doc_id"]
+        
+        # Skip unknown sources and errors
+        if source == "Unknown" or source == "Error":
+            continue
+            
+        # Use source + doc_id as the unique key to prevent duplicates
+        unique_key = f"{source}_{doc_id}"
+        
+        if unique_key not in unique_sources:
+            unique_sources[unique_key] = {
+                "source": source,
+                "doc_id": doc_id,
+                "doc_type": citation["doc_type"],
+                "case_id": citation["case_id"],
+                "tags": citation.get("tags", []),
+                "text": citation.get("text", "")
+            }
     
     return unique_sources
 
 def display_source_documents(unique_sources):
     """Display the source documents with expandable details"""
-    for source, info in unique_sources.items():
+    for unique_key, info in unique_sources.items():
+        source = info["source"]
+        
         with st.expander(f"{source} ({info['doc_type']})"):
             st.write(f"**Case ID:** {info['case_id']}")
             

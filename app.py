@@ -9,6 +9,7 @@ from chat_interface import build_chat_interface
 from about_page import about_page
 from system_check import check_dependencies
 from auth import display_auth_interface, create_default_admin
+from document_manager import build_document_manager
 
 # Configure tempfile to not delete files immediately
 # This allows us to handle file closing more carefully
@@ -39,6 +40,7 @@ add_tag_management_js()
 
 # Initialize session state
 def initialize_session_state():
+    """Initialize session state variables"""
     if 'chat_history' not in st.session_state:
         st.session_state.chat_history = []
     if 'documents' not in st.session_state:
@@ -53,14 +55,18 @@ def initialize_session_state():
         st.session_state.debug_mode = False
     if "settings" not in st.session_state:
         st.session_state.settings = {
-            "model_name": "gpt-3.5-turbo",
-            "temperature": 0.7
+            "model_name": "gpt-4",  # Changed from gpt-3.5-turbo to gpt-4
+            "temperature": 0.0,     # Changed from 0.7 to 0.0
+            "legal_expert_mode": True  # New setting for legal expert mode
         }
     if "show_sources" not in st.session_state:
         st.session_state.show_sources = True
     if "show_citations" not in st.session_state:
         st.session_state.show_citations = True
-
+    # Set Pinecone as default vector store
+    if "vectorstore_type" not in st.session_state:
+        st.session_state.vectorstore_type = "pinecone"
+        
 # Handle custom component events
 def handle_custom_events():
     # Handle tag removal events
@@ -95,7 +101,6 @@ def display_welcome_message():
             Need more help? Check out the About tab for detailed information on features and usage.
             """)
 
-# Main app layout
 def main():
     # Initialize session state
     initialize_session_state()
@@ -114,8 +119,19 @@ def main():
     build_sidebar()
     
     # Create main interface
-    tabs = ["Chat", "About"]
-    selected_tab = st.radio("Main interface sections", tabs, horizontal=True, label_visibility="collapsed")
+    tabs = ["Chat", "Document Explorer", "About"]
+    
+    # Use session state to control which tab is active
+    if 'current_tab' not in st.session_state:
+        st.session_state['current_tab'] = "Chat"
+    
+    # Select the tab from session state
+    tab_index = tabs.index(st.session_state['current_tab'])
+    selected_tab = st.radio("Main interface sections", tabs, index=tab_index, horizontal=True, label_visibility="collapsed")
+    
+    # Update session state if tab changed
+    if selected_tab != st.session_state['current_tab']:
+        st.session_state['current_tab'] = selected_tab
     
     if selected_tab == "Chat":
         # Display welcome message if this is the first view after login
@@ -125,6 +141,10 @@ def main():
         
         # Build chat interface
         build_chat_interface()
+    
+    elif selected_tab == "Document Explorer":
+        # Build document manager interface
+        build_document_manager()
     
     elif selected_tab == "About":
         about_page()

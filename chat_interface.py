@@ -6,6 +6,50 @@ from citation_handler import CitationTrackingHandler
 from document_context import build_document_context_panel
 from utils import format_tags_html
 
+def get_system_prompt(legal_expert_mode=True):
+    """
+    Get the system prompt for the chat model based on settings
+    
+    Args:
+        legal_expert_mode: Whether to use legal expert mode
+        
+    Returns:
+        String containing the system prompt
+    """
+    # Base system prompt
+    base_prompt = """You are a helpful AI assistant for a law firm handling legal documents and cases."""
+    
+    # Legal expert mode prompt
+    if legal_expert_mode:
+        legal_prompt = """
+        You are an expert legal assistant with extensive knowledge of legal terminology, procedures, and precedents.
+        
+        Adhere to the following guidelines in all responses:
+        
+        1. FACTUAL ACCURACY: Provide only factually accurate information. Do not make anything up. If you are unsure about a fact, clearly state your uncertainty and refrain from speculation.
+        
+        2. LEGAL LANGUAGE: Use precise legal terminology and legalese when appropriate. Demonstrate your knowledge of proper legal vernacular, citations, and formatting.
+        
+        3. EVIDENCE-BASED REASONING: Base all analyses on the documents and evidence provided. Cite specific passages and sources when available.
+        
+        4. FORMAL STRUCTURE: Structure responses in a formal, professional manner consistent with legal documentation.
+        
+        5. OBJECTIVE ANALYSIS: Maintain objectivity and present multiple perspectives when addressing complex legal questions.
+        
+        6. CONTEXTUAL AWARENESS: Consider the relevant jurisdiction, practice area, and specific legal context in all responses.
+        
+        7. CLARITY IN LIMITATIONS: Clearly state when a question falls outside the scope of the provided documents or your capabilities.
+        
+        Remember: You are assisting legal professionals who require precision, accuracy, and adherence to formal conventions in legal practice.
+        """
+        return base_prompt + legal_prompt
+    else:
+        # Default mode - more conversational but still professional
+        return base_prompt + """
+        Provide helpful information about legal documents and answer questions in a clear, professional manner.
+        Focus on accuracy and clarity in your responses.
+        """
+
 def build_chat_interface():
     """Build the main chat interface"""
     # Create two columns for the chat layout
@@ -106,13 +150,19 @@ def process_chat_input(user_input):
         search_kwargs={"k": 5}  # Return top 5 relevant documents
     )
     
-    # Initialize the model
-    model_name = st.session_state.settings.get("model_name", "gpt-3.5-turbo")
-    temperature = st.session_state.settings.get("temperature", 0.7)
+    # Initialize the model with system prompt from settings
+    model_name = st.session_state.settings.get("model_name", "gpt-4")
+    temperature = st.session_state.settings.get("temperature", 0.0)
+    legal_expert_mode = st.session_state.settings.get("legal_expert_mode", True)
     
+    # Get the system prompt based on settings
+    system_prompt = get_system_prompt(legal_expert_mode)
+    
+    # Initialize the ChatOpenAI (without system parameter)
     llm = ChatOpenAI(
         model_name=model_name,
         temperature=temperature
+        # Remove the system parameter
     )
     
     # Show spinner while processing
@@ -132,19 +182,25 @@ def process_chat_input(user_input):
             # Process citations from retrieved documents
             citation_handler.on_retriever_end(retrieved_docs)
             
-            # Set up a simple template
-            template = """Answer the question based on the following context:
+            # Set up a simple template that includes the system prompt
+            template = f"""
+            {system_prompt}
+            
+            Answer the question based on the following context:
 
             Context:
-            {context}
+            {{context}}
 
-            Question: {question}
+            Question: {{question}}
 
             Instructions:
             1. Base your answer only on the provided context
             2. If you don't know the answer based on the context, say so
             3. Keep your answer concise and focused on the question
             4. Include specific references to the documents you're using
+            5. Use formal legal terminology when appropriate
+            6. Provide only factually accurate information and do not make anything up
+            7. If you're unsure about a fact, clearly state your uncertainty
             """
             
             prompt = PromptTemplate(

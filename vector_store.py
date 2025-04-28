@@ -8,7 +8,7 @@ import uuid
 
 def initialize_vectorstore(documents, use_in_memory=True, vectorstore_type="chroma", pinecone_index=None):
     """
-    Initialize vector store with documents.
+    Initialize vector store with documents, ensuring no duplicates.
     
     Args:
         documents: List of document objects
@@ -30,6 +30,9 @@ def initialize_vectorstore(documents, use_in_memory=True, vectorstore_type="chro
     )
     
     langchain_docs = []
+    
+    # Track unique document chunks to prevent duplicates
+    unique_chunks = set()
     
     for doc in documents:
         try:
@@ -66,6 +69,17 @@ def initialize_vectorstore(documents, use_in_memory=True, vectorstore_type="chro
                     
                     # Create document objects for each chunk
                     for j, chunk in enumerate(chunks):
+                        # Create a unique key for this chunk to detect duplicates
+                        # Using doc id, page number, chunk index and hash of content
+                        chunk_key = f"{doc.get('id', '')}_{i}_{j}_{hash(chunk)}"
+                        
+                        # Skip if we've already processed this exact chunk
+                        if chunk_key in unique_chunks:
+                            continue
+                        
+                        # Add to unique chunks set
+                        unique_chunks.add(chunk_key)
+                        
                         # Create metadata dictionary with only simple types
                         metadata = {
                             "source": str(doc.get("title", "")),
@@ -75,8 +89,14 @@ def initialize_vectorstore(documents, use_in_memory=True, vectorstore_type="chro
                             "tags_str": tags_str,  # Store as string
                             "page": i,
                             "chunk": j,
-                            "text": chunk  # Add text as metadata for Pinecone
+                            "text": chunk,  # Add text as metadata for Pinecone
+                            "chunk_key": chunk_key  # Store unique key for future deduplication
                         }
+                        
+                        # Add uploader information if available
+                        if doc.get("uploaded_by"):
+                            metadata["uploaded_by"] = str(doc.get("uploaded_by", ""))
+                            metadata["uploaded_by_name"] = str(doc.get("uploaded_by_name", ""))
                         
                         # Create a LangChain Document
                         langchain_docs.append(Document(
@@ -101,6 +121,7 @@ def initialize_vectorstore(documents, use_in_memory=True, vectorstore_type="chro
         
         # Log the first few documents for debugging
         if st.session_state.get("debug_mode", False):
+            st.write(f"### Processed {len(langchain_docs)} unique document chunks (from {len(documents)} documents)")
             st.write("### Sample Documents For Vector Store:")
             for i, doc in enumerate(langchain_docs[:3]):  # Show first 3
                 st.write(f"Document {i}:")
@@ -143,7 +164,6 @@ def initialize_vectorstore(documents, use_in_memory=True, vectorstore_type="chro
                 st.write(langchain_docs[0].metadata)
             
         return None
-
 
 class PineconeVectorStore:
     """
